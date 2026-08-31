@@ -1,19 +1,21 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Clock, MapPin, MousePointerClick, Smile, UserRound } from 'lucide-react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import {
+  ChevronDown, FilePen, ListPlus, Maximize, MessageSquarePlus,
+  MousePointerClick, PenLine, Sparkles, WandSparkles, X, ZoomIn,
+} from 'lucide-react';
 import { useProjectStore } from '../../store/useProjectStore';
 import { useUIStore } from '../../store/useUIStore';
 import { useAIWriter } from '../../hooks/useAIWriter';
-import ActionBar, { type ActionId } from './ActionBar';
-import LabelBar from './LabelBar';
+import { SCENE_STATUS_META, type Scene } from '../../types';
+import AICommandPanel from './AICommandPanel';
 import SlashMenu from './SlashMenu';
 import { SLASH_COMMANDS } from '../../data/commands';
-import type { Scene, SlashCommand } from '../../types';
+import type { SlashCommand } from '../../types';
 
 function escapeHtml(s: string): string {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
-/** 纯文本 → HTML(段落结构) */
 function textToHtml(text: string): string {
   if (!text) return '<p><br></p>';
   return text
@@ -22,26 +24,48 @@ function textToHtml(text: string): string {
     .join('');
 }
 
-interface Props {
-  scene: Scene;
+interface CmdBtn {
+  id: string;
+  label: string;
+  icon: typeof Sparkles;
+  desc: string;
+  primary?: boolean;
 }
 
-export default function SceneEditor({ scene }: Props) {
+const CMDS: CmdBtn[] = [
+  { id: 'ai-continue',   label: '续写',       icon: PenLine,           desc: '顺着当前内容继续写' },
+  { id: 'ai-generate',   label: '生成',       icon: Sparkles,          desc: '按场景设定生成一段' },
+  { id: 'ai-dialogue',   label: '对话',       icon: MessageSquarePlus, desc: '生成角色对话' },
+  { id: 'ai-describe',   label: '描写',       icon: ZoomIn,            desc: '环境 / 战斗描写' },
+  { id: 'ai-polish',     label: '润色',       icon: WandSparkles,      desc: '提升文笔表现力' },
+  { id: 'ai-expand',     label: '扩写',       icon: Maximize,          desc: '补充细节,拉长' },
+  { id: 'ai-summarize',  label: '总结',       icon: FilePen,           desc: '生成场景摘要' },
+  { id: 'ai-beat',       label: '生成节拍',   icon: ListPlus,          desc: '基于场景生成节拍', primary: true },
+];
+
+/**
+ * 场景正文块(Write 页内每场景一个):
+ * - 只保留正文编辑器(场景元信息已在左侧导航,正文区不再重复展示)
+ * - AI 命令按钮触发参数面板,用户在面板内调整参数后才生成
+ * - 节拍生成是特殊命令:面板显示参考内容、参数、预览,用户确认追加到导航节拍
+ */
+export default function SceneEditor({ scene }: { scene: Scene }) {
   const updateSceneContent = useProjectStore((s) => s.updateSceneContent);
-  const updateSceneMeta = useProjectStore((s) => s.updateSceneMeta);
+  const setBeats = useProjectStore((s) => s.setBeats);
   const focusMode = useUIStore((s) => s.focusMode);
   const setFocusMode = useUIStore((s) => s.setFocusMode);
 
-  const editorRef = useRef<HTMLDivElement>(null);
-  const lastInnerRef = useRef<string>('');
-
-  // Slash 菜单状态
+  const [openCmd, setOpenCmd] = useState<string | null>(null);
   const [slashOpen, setSlashOpen] = useState(false);
   const [slashQuery, setSlashQuery] = useState('');
 
   const { state: ai, runAI, stop, applyToScene, discard } = useAIWriter();
 
-  // 场景切换时重置编辑器内容
+  const editorRef = useRef<HTMLDivElement>(null);
+  const lastInnerRef = useRef<string>('');
+  const scrollRef = useRef<HTMLDivElement>(null);
+
+  // 初始化正文
   useEffect(() => {
     const el = editorRef.current;
     if (el) {
@@ -50,7 +74,7 @@ export default function SceneEditor({ scene }: Props) {
     }
   }, [scene.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // 外部内容变更(如 AI 应用)同步回 DOM
+  // 外部内容变更同步
   useEffect(() => {
     const el = editorRef.current;
     if (el && lastInnerRef.current !== scene.content) {
@@ -59,7 +83,13 @@ export default function SceneEditor({ scene }: Props) {
     }
   }, [scene.content]);
 
-  /** 读取光标前从上一个空白到光标的内容(用于 / 过滤) */
+  // AI 流式输出滚动
+  useEffect(() => {
+    if (scrollRef.current && ai.active) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    }
+  }, [ai.output, ai.active]);
+
   const getSlashQuery = useCallback(() => {
     const sel = window.getSelection();
     if (!sel || !sel.anchorNode) return { query: '', active: false };
@@ -68,45 +98,34 @@ export default function SceneEditor({ scene }: Props) {
     const textBefore = node.textContent?.slice(0, sel.anchorOffset) ?? '';
     const lastSlash = textBefore.lastIndexOf('/');
     const lastSpace = Math.max(textBefore.lastIndexOf(' '), textBefore.lastIndexOf('\n'));
-    if (lastSlash > lastSpace) {
-      return { query: textBefore.slice(lastSlash + 1), active: true };
-    }
+    if (lastSlash > lastSpace) return { query: textBefore.slice(lastSlash + 1), active: true };
     return { query: '', active: false };
   }, []);
 
   const handleInput = useCallback(() => {
     const el = editorRef.current;
     if (!el) return;
-    const text = el.innerText.replace(/\u00a0/g, ' ');
-    // 去掉末尾的孤立换行(由空 <p> 产生)
-    const clean = text.replace(/\n+$/, '');
-    lastInnerRef.current = clean;
-    updateSceneContent(scene.id, clean);
+    const text = el.innerText.replace(/\u00a0/g, ' ').replace(/\n+$/, '');
+    lastInnerRef.current = text;
+    updateSceneContent(scene.id, text);
 
     const { query, active } = getSlashQuery();
-    if (active) {
-      setSlashQuery(query);
-      setSlashOpen(true);
-    } else {
-      setSlashOpen(false);
-    }
+    setSlashQuery(query);
+    setSlashOpen(active);
   }, [scene.id, updateSceneContent, getSlashQuery]);
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
-      // 输入 / 后立即检测
       if (e.key === '/' && !slashOpen) {
         setSlashQuery('');
         setSlashOpen(true);
       }
-      if (e.key === 'Escape' && slashOpen) {
-        setSlashOpen(false);
-      }
+      if (e.key === 'Escape' && slashOpen) setSlashOpen(false);
     },
     [slashOpen]
   );
 
-  // 点击编辑区外部时关闭 / 菜单
+  // 关闭 / 菜单(点击编辑)
   useEffect(() => {
     if (!slashOpen) return;
     const onDown = (e: MouseEvent) => {
@@ -117,53 +136,38 @@ export default function SceneEditor({ scene }: Props) {
     return () => document.removeEventListener('mousedown', onDown);
   }, [slashOpen]);
 
-  /** 执行 / 命令 */
   const handleCommand = useCallback(
     (cmd: SlashCommand) => {
       setSlashOpen(false);
       const el = editorRef.current;
-      const rest = el?.innerText ?? '';
 
       switch (cmd.category) {
         case 'ai-generate':
-        case 'ai-edit': {
-          runAI(cmd.id, {
-            commandId: cmd.id,
-            sceneTitle: scene.title,
-            pov: scene.pov || '主角',
-            location: scene.location || '场景',
-            mood: scene.mood || '紧张',
-            content: scene.content,
-            labels: scene.labels,
-          });
+        case 'ai-edit':
+          setOpenCmd(cmd.id);
           break;
-        }
-        case 'view': {
+        case 'view':
           if (cmd.id === 'view-focus') setFocusMode(!focusMode);
           break;
-        }
         case 'structure': {
           const insert =
-            cmd.id === 'struct-h1'
-              ? `\n\n# ${scene.title}\n\n`
-              : cmd.id === 'struct-hr'
-                ? '\n\n—— ◇ ——\n\n'
-                : '\n\n□ [ ] 待办\n\n';
-          const base = el?.innerText.replace(/\n+$/, '') ?? '';
-          const removeSlash = base.replace(/\/\s*$/, '');
-          const next = removeSlash + insert;
-          updateSceneContent(scene.id, next.replace(/\n{3,}/g, '\n\n'));
+            cmd.id === 'struct-h1' ? `\n\n# ${scene.title}\n\n` :
+            cmd.id === 'struct-hr' ? '\n\n—— ◇ ——\n\n' :
+            '\n\n□ [ ] 待办\n\n';
+          const base = el?.innerText.replace(/\n+$/, '').replace(/\/\s*$/, '') ?? '';
+          const next = (base + insert).replace(/\n{3,}/g, '\n\n');
+          updateSceneContent(scene.id, next);
           requestAnimationFrame(() => {
             if (editorRef.current) {
-              editorRef.current.innerHTML = textToHtml(next.replace(/\n{3,}/g, '\n\n'));
-              lastInnerRef.current = next.replace(/\n{3,}/g, '\n\n');
+              editorRef.current.innerHTML = textToHtml(next);
+              lastInnerRef.current = next;
             }
           });
           break;
         }
         case 'codex': {
           const name = SLASH_COMMANDS.find((c) => c.id === cmd.id)?.label ?? '档案';
-          const base = el?.innerText.replace(/\/\s*$/, '') ?? '';
+          const base = el?.innerText.replace(/\n+$/, '').replace(/\/\s*$/, '') ?? '';
           const next = `${base}\n\n[${name}::${cmd.id}]`;
           updateSceneContent(scene.id, next);
           requestAnimationFrame(() => {
@@ -175,78 +179,71 @@ export default function SceneEditor({ scene }: Props) {
           break;
         }
       }
-      void rest;
     },
-    [scene, runAI, setFocusMode, focusMode, updateSceneContent]
+    [scene, setFocusMode, focusMode, updateSceneContent]
   );
 
-  const handleAction = useCallback(
-    (actionId: ActionId) => {
-      runAI(actionId, {
-        commandId: actionId,
-        sceneTitle: scene.title,
-        pov: scene.pov || '主角',
-        location: scene.location || '场景',
-        mood: scene.mood || '紧张',
-        content: scene.content,
-        labels: scene.labels,
-      });
-    },
-    [scene, runAI]
-  );
-
-  const hasMeta = useMemo(
-    () => [scene.pov, scene.location, scene.timeline, scene.mood].some(Boolean),
-    [scene.pov, scene.location, scene.timeline, scene.mood]
-  );
-
-  // AI 流式输出时自动滚动到底部
-  const scrollRef = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    const el = scrollRef.current;
-    if (el && ai.active) el.scrollTop = el.scrollHeight;
-  }, [ai.output, ai.active]);
+  /** 节拍生成完成后,用户确认 → 解析输出为节拍列表,追加到当前场景 */
+  const acceptBeatDraft = (raw: string) => {
+    const lines = raw
+      .split('\n')
+      .map((l) => l.replace(/^[◆•\-*\d.)\s]+/, '').trim())
+      .filter((l) => l.length > 4);
+    if (!lines.length) return;
+    const beats = lines.slice(0, 8).map((summary, i) => ({
+      id: `${scene.id}-beat-${Date.now()}-${i}`,
+      summary,
+    }));
+    setBeats(scene.id, beats);
+  };
 
   return (
     <div className="flex h-full min-w-0 flex-1 flex-col">
       <div ref={scrollRef} className="relative min-h-0 flex-1 overflow-y-auto">
-        <div className={`mx-auto ${focusMode ? 'max-w-2xl pt-16' : 'max-w-3xl px-8 pt-8'}`}>
-          {/* 标题 */}
-          <input
-            value={scene.title}
-            onChange={(e) => updateSceneMeta(scene.id, { title: e.target.value })}
-            placeholder="场景标题…"
-            className={`w-full bg-transparent font-serif font-semibold text-slate-100 outline-none placeholder:text-slate-600 ${
-              focusMode ? 'text-3xl' : 'text-2xl'
-            }`}
-          />
-
-          {/* 元信息条 */}
+        <div className={`mx-auto ${focusMode ? 'max-w-2xl pt-16' : 'max-w-3xl px-8 pt-6'}`}>
+          {/* AI 命令按钮组 */}
           {!focusMode && (
-            <div className="mt-3 flex flex-wrap items-center gap-1.5 border-b border-ink-700/40 pb-3">
-              <MetaChip icon={UserRound} label="POV" value={scene.pov} color="text-violet-300" onChange={(v) => updateSceneMeta(scene.id, { pov: v })} placeholder="视角角色" />
-              <MetaChip icon={MapPin} label="地点" value={scene.location} color="text-emerald-300" onChange={(v) => updateSceneMeta(scene.id, { location: v })} placeholder="地点" />
-              <MetaChip icon={Clock} label="时间" value={scene.timeline} color="text-amber-300" onChange={(v) => updateSceneMeta(scene.id, { timeline: v })} placeholder="时间线" />
-              <MetaChip icon={Smile} label="基调" value={scene.mood} color="text-rose-300" onChange={(v) => updateSceneMeta(scene.id, { mood: v })} placeholder="情绪基调" />
-              {!hasMeta && <span className="text-[10px] text-slate-600">点击填写场景元信息,AI 将据此保持一致性</span>}
+            <div className="flex flex-wrap items-center gap-1 mb-3">
+              {CMDS.map((c) => {
+                const Icon = c.icon;
+                return (
+                  <button
+                    key={c.id}
+                    title={c.desc}
+                    onClick={() => setOpenCmd(c.id)}
+                    className={`flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium transition-all ${
+                      c.primary
+                        ? 'bg-amber-500/15 text-amber-200 ring-1 ring-amber-500/30 hover:bg-amber-500/25'
+                        : 'border border-ink-700/60 bg-ink-850 text-slate-300 hover:border-accent-500/40 hover:text-accent-300'
+                    }`}
+                  >
+                    <Icon size={13} />
+                    {c.label}
+                  </button>
+                );
+              })}
+              <span className="ml-1 flex items-center gap-1 rounded-md bg-ink-800 px-2 py-1 text-[10px] text-slate-600 ring-1 ring-ink-700/50">
+                在正文输入 <kbd className="rounded bg-ink-700 px-1 font-mono">/</kbd> 唤起更多 AI 命令
+              </span>
+              <span className="ml-auto flex items-center gap-1 text-[10px] text-slate-600">
+                {SCENE_STATUS_META[scene.status].dot.replace('bg-', 'text-')}
+                {SCENE_STATUS_META[scene.status].label} · {scene.beats.length} 节拍 · {scene.content.replace(/\s/g, '').length.toLocaleString()} 字
+              </span>
             </div>
           )}
 
-          {!focusMode && (
-            <div className="mt-2.5">
-              <LabelBar scene={scene} />
-            </div>
+          {/* AI 命令参数面板(点击 AI 按钮展开) */}
+          {!focusMode && openCmd && (
+            <AICommandPanel
+              scene={scene}
+              commandId={openCmd}
+              onClose={() => setOpenCmd(null)}
+              onBeatAccept={acceptBeatDraft}
+            />
           )}
 
-          {/* ActionBar */}
-          {!focusMode && (
-            <div className="mt-3.5">
-              <ActionBar onRun={handleAction} ai={ai} onStop={stop} onApply={(m) => applyToScene(scene.id, m)} onDiscard={discard} />
-            </div>
-          )}
-
-          {/* 正文编辑器 */}
-          <div className="relative mt-4 pb-24">
+          {/* 正文 contentEditable */}
+          <div className="relative pb-24">
             <div
               ref={editorRef}
               contentEditable
@@ -260,8 +257,8 @@ export default function SceneEditor({ scene }: Props) {
                   updateSceneContent(scene.id, text);
                 }
               }}
-              data-placeholder="从这里开始写作,输入 / 唤起 AI 命令…"
-              className="prose-editor min-h-[300px]"
+              data-placeholder="在这里直接写,或点击上方 AI 命令,先调整参数再生成…"
+              className="prose-editor min-h-[320]"
             />
 
             {/* / 命令菜单 */}
@@ -271,15 +268,21 @@ export default function SceneEditor({ scene }: Props) {
               </div>
             )}
 
-            {/* AI 流式输出区 */}
+            {/* AI 流式输出 */}
             {ai.active && (
               <div className="mt-4 rounded-xl border border-accent-500/40 bg-accent-500/[0.06] p-4 animate-fade-in">
                 <div className="mb-2 flex items-center gap-2 text-xs font-medium text-accent-200">
                   <MousePointerClick size={13} />
-                  AI 输出 · {ai.commandLabel}
-                  <span className="ml-auto font-mono text-[10px] text-accent-400/60">{ai.output.length} 字</span>
+                  AI 正在{ai.commandLabel}…
+                  <button
+                    onClick={stop}
+                    className="ml-auto flex items-center gap-1 rounded bg-ink-800 px-1.5 py-0.5 text-[10px] text-slate-300 hover:text-red-400"
+                  >
+                    <X size={10} />
+                    停止
+                  </button>
                 </div>
-                <div className="prose-editor ai-cursor text-slate-200">
+                <div className="prose-editor ai-cursor max-h-56 overflow-y-auto text-slate-200">
                   {ai.output.split('\n').map((line, i) => (
                     <p key={i} className={line.trim() === '' ? 'h-3' : ''}>
                       {line}
@@ -289,12 +292,12 @@ export default function SceneEditor({ scene }: Props) {
               </div>
             )}
 
-            {/* AI 完成 → 操作区 */}
-            {!ai.active && ai.output && !ai.error && (
+            {/* AI 完成 → 操作 */}
+            {!ai.active && ai.output && !ai.error && openCmd !== 'ai-beat' && (
               <div className="mt-4 rounded-xl border border-ink-700/70 bg-ink-850/80 p-4 animate-fade-in">
                 <div className="mb-2 flex items-center gap-2 text-xs font-medium text-emerald-300">
-                  <SparkleIcon />
-                  AI {ai.commandLabel}完成 · 请选择如何处理
+                  <ChevronDown size={12} />
+                  AI {ai.commandLabel}完成 · 选择如何处理
                 </div>
                 <div className="prose-editor max-h-64 overflow-y-auto text-slate-300">
                   {ai.output.split('\n').map((line, i) => (
@@ -307,12 +310,13 @@ export default function SceneEditor({ scene }: Props) {
                   <button onClick={() => applyToScene(scene.id, 'append')} className="btn-primary">
                     追加到正文
                   </button>
-                  <button onClick={() => applyToScene(scene.id, 'replace')} className="btn border border-ink-700 text-slate-300 hover:border-accent-500/40">
+                  <button
+                    onClick={() => applyToScene(scene.id, 'replace')}
+                    className="btn border border-ink-700 text-slate-300 hover:border-accent-500/40"
+                  >
                     替换全文
                   </button>
-                  <button onClick={discard} className="btn-ghost">
-                    丢弃
-                  </button>
+                  <button onClick={discard} className="btn-ghost">丢弃</button>
                 </div>
               </div>
             )}
@@ -320,64 +324,5 @@ export default function SceneEditor({ scene }: Props) {
         </div>
       </div>
     </div>
-  );
-}
-
-function SparkleIcon() {
-  return <span className="text-emerald-300">✦</span>;
-}
-
-/** 可编辑元信息 chip */
-function MetaChip({
-  icon: Icon,
-  label,
-  value,
-  color,
-  onChange,
-  placeholder,
-}: {
-  icon: typeof UserRound;
-  label: string;
-  value: string;
-  color: string;
-  onChange: (v: string) => void;
-  placeholder: string;
-}) {
-  const [editing, setEditing] = useState(false);
-  const [draft, setDraft] = useState(value);
-
-  const commit = () => {
-    onChange(draft.trim());
-    setEditing(false);
-  };
-
-  if (editing) {
-    return (
-      <input
-        autoFocus
-        value={draft}
-        onChange={(e) => setDraft(e.target.value)}
-        onBlur={commit}
-        onKeyDown={(e) => e.key === 'Enter' && commit()}
-        className="input-dark !w-36 !py-0.5 text-[11px]"
-      />
-    );
-  }
-
-  return (
-    <button
-      onClick={() => {
-        setDraft(value);
-        setEditing(true);
-      }}
-      title={`编辑${label}`}
-      className="group flex items-center gap-1 rounded-md border border-ink-700/50 bg-ink-850 px-2 py-0.5 text-[11px] transition-colors hover:border-accent-500/40"
-    >
-      <span className="text-slate-600">{label}</span>
-      <span className={`flex items-center gap-1 ${value ? color : 'text-slate-600'}`}>
-        <Icon size={11} />
-        {value || placeholder}
-      </span>
-    </button>
   );
 }

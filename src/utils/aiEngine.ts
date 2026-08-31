@@ -18,6 +18,15 @@ export interface AIGenContext {
   content: string;
   chapterTitle?: string;
   labels: string[];
+  /* 用户在 AI 参数面板里调整的参数(可选,引擎会据此调整输出风格) */
+  length?: 'short' | 'medium' | 'long' | 'xl';
+  povTense?: 'third' | 'first';
+  style?: 'classic' | 'modern' | 'concise' | 'ornate' | 'tense' | 'warm';
+  userHint?: string;
+  /* 生成节拍专用 */
+  beatCount?: number;
+  beatDensity?: 'tight' | 'balanced' | 'loose';
+  beatFocus?: Array<'conflict' | 'character' | 'suspense' | 'emotion' | 'action'>;
 }
 
 export const AI_COMMAND_LABELS: Record<string, string> = {
@@ -37,7 +46,14 @@ export const AI_COMMAND_LABELS: Record<string, string> = {
 
 /** 命令 → 返回文本模板 */
 function buildOutput(ctx: AIGenContext): string {
-  const { commandId, sceneTitle, pov, location, mood } = ctx;
+  const { commandId, sceneTitle, pov, location, mood, length, povTense, style, userHint, beatCount, beatDensity, beatFocus } = ctx;
+
+  const stylePrefix = style ? `[文风:${styleKey(style)}] ` : '';
+  const hintSuffix = userHint ? `\n\n(用户要求:${userHint})` : '';
+  const lenSuffix = length === 'short' ? '\n\n[精简版 · 约 150 字]' : length === 'long' ? '\n\n[扩展版 · 约 700 字]' : length === 'xl' ? '\n\n[完整扩展版 · 约 1200 字]' : '';
+
+  // 视角/人称标记(占位,真实 LLM 接后可据此外显)
+  void povTense;
 
   switch (commandId) {
     case 'ai-continue':
@@ -88,15 +104,39 @@ function buildOutput(ctx: AIGenContext): string {
         `4. 伏笔:血魔教少主秦无咎其实见过沈墨尘,在穿越之前。`,
       ].join('\n');
 
-    case 'ai-beat':
-      return [
-        `「${sceneTitle}」节拍建议:`,
+    case 'ai-beat': {
+      const n = beatCount ?? 4;
+      const density = beatDensity ?? 'balanced';
+      const focus = beatFocus?.length ? beatFocus : ['conflict', 'character'];
+      // 节拍戏剧功能:开端 / 推进 / 转折 / 高潮 / 收束(按密度分配)
+      const arcs = density === 'tight'
+        ? ['开端', '转折', '高潮', '收束'].slice(0, n).concat(Array(Math.max(0, n - 4)).fill('推进')).slice(0, n)
+        : density === 'loose'
+          ? ['铺设', '推进', '推进', '推进', '转折', '高潮', '收束'].slice(0, n)
+          : ['开端', '推进', '转折', '高潮'].slice(0, n).concat(Array(Math.max(0, n - 4)).fill('推进')).slice(0, n);
+      // 每行:序号 + 戏剧功能 + 关注点 + 一句话节拍描述
+      const templates = [
+        () => `${pov}抵达${location},带着悬念与不安,环境/心理初描`,
+        () => `${pov}与某人物初次正面接触,关系/立场初显`,
+        () => `${pov}的试探/小冲突,小爆点,埋线`,
+        () => `${pov}在${location}陷入对抗,生死/信仰一搏`,
+        () => `${pov}真相大白/错位,命运天平倾斜`,
+        () => `${pov}作出关键抉择,人物弧光转向`,
+        () => `${pov}暂时脱身/合谋,${location}局势重置`,
+        () => `${pov}独处反思,情绪落点 + 下一卷钩子`,
+      ];
+      const focusText = focus.map(focusKey).join('、');
+      const lines: string[] = [
+        `「${sceneTitle}」节拍建议(共 ${n} 个 · 密度:${density} · 关注:${focusText}):`,
         '',
-        `◆ 节拍一:${pov}抵达${location},发现异样(疑)`,
-        `◆ 节拍二:遭遇敌手,以古剑之力周旋(斗)`,
-        `◆ 节拍三:敌手吐露关键信息,阴谋浮出水面(转)`,
-        `◆ 节拍四:惊变突起,场景在悬念中收束(钩子)`,
-      ].join('\n');
+      ];
+      arcs.forEach((arc, i) => {
+        const tmpl = templates[i % templates.length]();
+        lines.push(`◆ ${i + 1} · ${arc}:${tmpl}`);
+      });
+      if (userHint) lines.push('', `(用户要求:${userHint})`);
+      return lines.join('\n');
+    }
 
     case 'ai-polish':
       return [
@@ -157,12 +197,27 @@ function buildOutput(ctx: AIGenContext): string {
 export async function* streamAIText(ctx: AIGenContext): AsyncGenerator<string> {
   const text = buildOutput(ctx);
   const chunkSize = 3;
-  // 随机化速度,让"打字"更像真人
   const speed = 12 + Math.random() * 14;
 
   for (let i = 0; i < text.length; i += chunkSize) {
     await new Promise((r) => setTimeout(r, speed));
     yield text.slice(i, i + chunkSize);
+  }
+
+  // 节拍生成不追加 suffix(节拍预览由面板独立解析行)
+  if (ctx.commandId === 'ai-beat') return;
+
+  // 用户额外要求 + 输出长度提示(流末尾)
+  const suffixParts: string[] = [];
+  if (ctx.userHint) suffixParts.push(`\n\n〔已应用用户要求:${ctx.userHint}〕`);
+  if (ctx.length === 'short') suffixParts.push('\n\n〔精简版〕');
+  else if (ctx.length === 'long') suffixParts.push('\n\n〔扩展版 · 约 700 字〕');
+  else if (ctx.length === 'xl') suffixParts.push('\n\n〔完整扩展版 · 约 1200 字〕');
+  const suffix = suffixParts.join('');
+  if (!suffix) return;
+  for (let i = 0; i < suffix.length; i += chunkSize) {
+    await new Promise((r) => setTimeout(r, speed));
+    yield suffix.slice(i, i + chunkSize);
   }
 }
 
@@ -174,4 +229,12 @@ export function buildBeatsFromScene(title: string, pov: string, location: string
     { summary: `冲突升级,${pov}被迫作出关键抉择` },
     { summary: `悬念收束,为下一场景埋下钩子` },
   ];
+}
+
+function styleKey(s: NonNullable<AIGenContext['style']>): string {
+  return { classic: '古风典雅', modern: '现代简练', concise: '简洁紧凑', ornate: '华丽铺陈', tense: '紧张悬疑', warm: '温情感性' }[s];
+}
+
+function focusKey(f: string): string {
+  return { conflict: '冲突', character: '人物', suspense: '悬念', emotion: '情感', action: '动作' }[f] ?? f;
 }

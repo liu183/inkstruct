@@ -1,12 +1,15 @@
-feat: Write 写作工作台改为章级视图 + 修复新建项目 bug + Plan 增删改查
+feat: Write 区去掉场景框 + AI 命令专业参数化 + 节拍生成面板
 
-- Write:恢复原 contentEditable 编辑器,本章所有场景连续排版,场景间用
-  横幅分隔标识;左侧新增「本章结构」导航(场景来自 Plan 规划,列出全部
-  场景与节拍),每个节拍点 ✨ 可一键 AI 扩写并插入该场景正文(带「◆ 节拍N·摘要」)
-- aiEngine:新增 ai-beat-expand 命令模板,服务于节拍级扩写
-- store:修复 firstIds 返回字段名错误(新建/切换项目后导航 id 悬空的根因);
-  新增 moveChapter 支持章节拖拽排序与跨单元移动
-- Plan:GridView/OutlineView 场景支持增删改查(「添加场景」走 SceneEditModal
-  填写标题/POV/地点/摘要后创建并进入写作;卡片 hover 显示编辑/删除);
-  章节支持拖拽重排(同单元内 + 跨单元)
-- 项目切换器:MetaForm 加 key 强制重置,避免状态复用
+- Write 正文区:去除场景横幅(标题/POV/地点/时间/基调等已在左侧导航),
+  正文只保留纯净的 contentEditable 富文本编辑器 + AI 命令按钮组 +
+  AI 流式输出区
+- AI 命令:点击后弹出专业参数面板,用户调整参数后才生成,避免一键直接输出
+  通用参数:输出长度、视角与人称、文风、用户额外要求、参考正文预览
+- 生成节拍专用面板:展示参考内容、参数(节拍数量/节奏密度/关注点多选)、
+  流式节拍预览,用户点「同意追加到导航节拍」才写入
+- aiEngine:扩展 ctx 接受 length/povTense/style/userHint/beatCount/
+  beatDensity/beatFocus 参数,buildOutput 据此动态生成
+
+新流程:点 AI 按钮 -> 调整专业参数 -> 看参考内容 -> 点生成 ->
+AI 流式输出 -> 完成时选择追加/替换/丢弃,节拍则在面板内显示预览
+列表,确认追加才更新导航节拍

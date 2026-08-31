@@ -85,20 +85,17 @@ export default function WriteWorkspace() {
         />
       )}
 
-      {/* 章级连续编辑器:所有场景正文放一起 */}
+      {/* 章级连续编辑器:所有场景正文放一起,场景框已在左侧导航,这里只展示正文 */}
       <div className="min-h-0 flex-1 overflow-y-auto">
-        <div className="mx-auto max-w-3xl space-y-6 px-6 py-6">
-          {chapter.scenes.map((scene, i) => (
+        <div className="mx-auto max-w-3xl px-6 py-6">
+          {chapter.scenes.map((scene) => (
             <div
               key={scene.id}
               ref={(el) => {
                 sceneRefs.current[scene.id] = el;
               }}
+              className="border-b border-ink-700/30 last:border-b-0"
             >
-              {/* 场景分隔标识 */}
-              <SceneBanner scene={scene} index={i} total={chapter.scenes.length} />
-
-              {/* 原富文本编辑器 */}
               <SceneEditor scene={scene} />
             </div>
           ))}
@@ -116,56 +113,6 @@ export default function WriteWorkspace() {
 
       {/* 自动灵感弹卡 */}
       <AmbientInspiration />
-    </div>
-  );
-}
-
-/* ============ 场景分隔横幅 ============ */
-
-function SceneBanner({
-  scene,
-  index,
-  total,
-}: {
-  scene: Chapter['scenes'][number];
-  index: number;
-  total: number;
-}) {
-  return (
-    <div className="flex items-center gap-2.5 rounded-t-xl border border-b-0 border-ink-700/60 bg-gradient-to-r from-accent-500/[0.09] via-ink-900/60 to-transparent px-4 py-2">
-      <span className="shrink-0 rounded-md bg-accent-500/15 px-1.5 py-0.5 font-mono text-[10px] font-bold text-accent-300 ring-1 ring-accent-500/25">
-        场景 {index + 1}/{total}
-      </span>
-      <span className="min-w-0 flex-1 truncate text-xs font-semibold text-slate-200">
-        {scene.title}
-      </span>
-      <span className="hidden shrink-0 items-center gap-1 text-[10px] text-slate-500 sm:flex">
-        {scene.pov && (
-          <span className="flex items-center gap-0.5">
-            <UserRound size={10} className="text-violet-400/70" />
-            {scene.pov}
-          </span>
-        )}
-        {scene.location && (
-          <span className="flex items-center gap-0.5">
-            <MapPin size={10} className="text-emerald-400/70" />
-            {scene.location}
-          </span>
-        )}
-        {scene.timeline && (
-          <span className="flex items-center gap-0.5">
-            <Clock size={10} className="text-amber-400/70" />
-            {scene.timeline}
-          </span>
-        )}
-      </span>
-      <span className="shrink-0 text-[10px] text-slate-600">
-        {scene.beats.length} 节拍 · {scene.wordCount.toLocaleString()} 字
-      </span>
-      <span className={`chip shrink-0 ${SCENE_STATUS_META[scene.status].color} bg-ink-800`}>
-        <span className={`h-1.5 w-1.5 rounded-full ${SCENE_STATUS_META[scene.status].dot}`} />
-        {SCENE_STATUS_META[scene.status].label}
-      </span>
     </div>
   );
 }
