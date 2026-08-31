@@ -1,0 +1,115 @@
+name: Deploy to Server
+
+# 默认仅手动触发(保留待启用):需要部署到服务器时,在 Actions 页面点击 "Run workflow"
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    name: Build & Deploy to Server
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    env:
+      SERVER_HOST: ${{ secrets.SERVER_HOST }}
+      SERVER_USER: ${{ secrets.SERVER_USER }}
+      SERVER_PORT: ${{ secrets.SERVER_PORT }}
+      SERVER_DEPLOY_PATH: ${{ secrets.SERVER_DEPLOY_PATH }}
+      SERVER_SSH_KEY: ${{ secrets.SERVER_SSH_KEY }}
+      # 服务器上若用域名/IP 根路径访问则用 "/";部署在子路径时可在仓库 Variables 里设置 VITE_BASE_PATH 覆盖
+      VITE_BASE_PATH: ${{ vars.VITE_BASE_PATH || '/' }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      - name: Upload dist to server (staging dir)
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ env.SERVER_HOST }}
+          username: ${{ env.SERVER_USER }}
+          port: ${{ env.SERVER_PORT }}
+          key: ${{ env.SERVER_SSH_KEY }}
+          source: "dist/*"
+          target: /tmp/inkstruct-deploy
+
+      - name: Deploy & configure Nginx
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ env.SERVER_HOST }}
+          username: ${{ env.SERVER_USER }}
+          port: ${{ env.SERVER_PORT }}
+          key: ${{ env.SERVER_SSH_KEY }}
+          script: |
+            set -e
+
+            # 自动识别是否可用 sudo
+            SUDO=""
+            if [ "$(id -u)" -ne 0 ]; then SUDO="sudo"; fi
+
+            DEPLOY_DIR="${{ env.SERVER_DEPLOY_PATH }}"
+            STAGING_DIR=/tmp/inkstruct-deploy
+
+            # 确保 Nginx 已安装(未安装则自动安装)
+            if ! command -v nginx >/dev/null 2>&1; then
+              echo "nginx not found, installing..."
+              if command -v apt-get >/dev/null 2>&1; then
+                $SUDO apt-get update -y && $SUDO apt-get install -y nginx
+              elif command -v yum >/dev/null 2>&1; then
+                $SUDO yum install -y nginx
+              else
+                echo "Unsupported package manager, please install nginx manually."
+                exit 1
+              fi
+            fi
+
+            # 发布:保留上一版本为 .bak,原子切换,失败可回滚
+            $SUDO mkdir -p "$DEPLOY_DIR"
+            $SUDO rm -rf "${DEPLOY_DIR}.bak"
+            [ -d "$DEPLOY_DIR" ] && $SUDO mv "$DEPLOY_DIR" "${DEPLOY_DIR}.bak"
+            $SUDO mkdir -p "$DEPLOY_DIR"
+            $SUDO cp -r "$STAGING_DIR"/* "$DEPLOY_DIR/"
+            $SUDO rm -rf "$STAGING_DIR"
+
+            # Nginx 站点配置:仅当不存在时创建,避免覆盖已有站点配置
+            NGINX_CONF=/etc/nginx/conf.d/inkstruct.conf
+            if [ ! -f "$NGINX_CONF" ]; then
+              $SUDO tee "$NGINX_CONF" > /dev/null <<'EOF'
+            server {
+                listen 80;
+                server_name _;
+                root __DEPLOY_DIR__;
+                index index.html;
+
+                location / {
+                    try_files $uri $uri/ /index.html;
+                }
+
+                gzip on;
+                gzip_types text/plain text/css application/javascript application/json image/svg+xml;
+            }
+            EOF
+              # 注入实际部署路径
+              $SUDO sed -i "s|__DEPLOY_DIR__|${DEPLOY_DIR}|g" "$NGINX_CONF"
+            fi
+
+            # 校验配置并重载
+            $SUDO nginx -t
+            $SUDO systemctl reload nginx 2>/dev/null || $SUDO service nginx reload
+
+            echo "✅ Deployed to ${DEPLOY_DIR}"
