@@ -1,6 +1,7 @@
 import { TrendingUp } from 'lucide-react';
 import { useUIStore } from '../../store/useUIStore';
 import { useProjectStore } from '../../store/useProjectStore';
+import { flatChapters, statusStats, totalWords } from '../../utils/structure';
 import GridView from './GridView';
 import MatrixView from './MatrixView';
 import OutlineView from './OutlineView';
@@ -8,6 +9,8 @@ import OutlineView from './OutlineView';
 export default function PlanWorkspace() {
   const mode = useUIStore((s) => s.planViewMode);
   const project = useProjectStore((s) => s.project);
+  const stats = statusStats(project);
+  const words = totalWords(project);
 
   return (
     <div className="flex h-full flex-col overflow-hidden">
@@ -22,21 +25,17 @@ export default function PlanWorkspace() {
           </div>
           <div className="flex shrink-0 items-center gap-2">
             <div className="panel flex items-center gap-3 px-3 py-2 text-center">
-              <MiniStat label="章节" value={project.chapters.length} />
+              <MiniStat label="卷" value={project.volumes.length} />
               <Divider />
-              <MiniStat label="场景" value={project.chapters.flatMap((c) => c.scenes).length} />
+              <MiniStat label="章" value={flatChapters(project).length} />
               <Divider />
-              <MiniStat
-                label="总字数"
-                value={project.chapters
-                  .flatMap((c) => c.scenes)
-                  .reduce((n, s) => n + s.wordCount, 0)
-                  .toLocaleString()}
-              />
+              <MiniStat label="场景" value={stats.total} />
+              <Divider />
+              <MiniStat label="总字数" value={words.toLocaleString()} />
             </div>
             <div className="panel flex items-center gap-1.5 px-3 py-2 text-[11px] text-emerald-400">
               <TrendingUp size={13} />
-              本周 +4.2%
+              完成 {stats.done}/{stats.total}
             </div>
           </div>
         </div>

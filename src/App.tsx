@@ -5,6 +5,11 @@ import PlanWorkspace from './components/plan/PlanWorkspace';
 import WriteWorkspace from './components/write/WriteWorkspace';
 import CodexWorkspace from './components/codex/CodexWorkspace';
 import InspirationWorkspace from './components/inspiration/InspirationWorkspace';
+import DraftsWorkspace from './components/drafts/DraftsWorkspace';
+import JournalWorkspace from './components/journal/JournalWorkspace';
+import AIPanel from './components/ai/AIPanel';
+import ShareModal from './components/share/ShareModal';
+import SettingsModal from './components/settings/SettingsModal';
 import { useUIStore } from './store/useUIStore';
 
 export default function App() {
@@ -20,9 +25,16 @@ export default function App() {
           {workspace === 'write' && <WriteWorkspace />}
           {workspace === 'codex' && <CodexWorkspace />}
           {workspace === 'inspiration' && <InspirationWorkspace />}
+          {workspace === 'drafts' && <DraftsWorkspace />}
+          {workspace === 'journal' && <JournalWorkspace />}
         </main>
       </div>
       <StatusBar />
+
+      {/* 全局浮层 */}
+      <AIPanel />
+      <ShareModal />
+      <SettingsModal />
     </div>
   );
 }

@@ -1,9 +1,10 @@
 import {
   BookMarked, Grid3x3, LayoutGrid, ListTree, Map, PenSquare,
-  PanelRight, Search, Settings, Share2, Sparkles, Target,
+  PanelRight, Settings, Share2, Sparkles, Target,
 } from 'lucide-react';
 import { useUIStore } from '../../store/useUIStore';
-import { useProjectStore, useActiveChapter, useActiveScene } from '../../store/useProjectStore';
+import { useProjectStore, useActiveScene } from '../../store/useProjectStore';
+import { locateChapter } from '../../utils/structure';
 import type { PlanViewMode, Workspace } from '../../types';
 
 const WORKSPACES: { id: Workspace; label: string; icon: typeof PenSquare; hint: string }[] = [
@@ -26,10 +27,14 @@ export default function TopBar() {
   const setPlanViewMode = useUIStore((s) => s.setPlanViewMode);
   const setCodexDrawerOpen = useUIStore((s) => s.setCodexDrawerOpen);
   const codexDrawerOpen = useUIStore((s) => s.codexDrawerOpen);
+  const setAiPanelOpen = useUIStore((s) => s.setAiPanelOpen);
+  const setShareOpen = useUIStore((s) => s.setShareOpen);
+  const setSettingsOpen = useUIStore((s) => s.setSettingsOpen);
+  const aiPanelOpen = useUIStore((s) => s.aiPanelOpen);
 
-  const chapter = useActiveChapter();
   const scene = useActiveScene();
   const project = useProjectStore((s) => s.project);
+  const loc = useProjectStore((s) => locateChapter(s.project, s.activeChapterId));
 
   return (
     <header className="flex h-12 shrink-0 items-center gap-3 border-b border-ink-700/60 bg-ink-900/70 px-3 backdrop-blur">
@@ -68,11 +73,27 @@ export default function TopBar() {
         })}
       </div>
 
-      {/* 当前定位 */}
+      {/* 当前定位:项目 / 卷 / 单元 / 章 / 场景 */}
       <div className="flex min-w-0 items-center gap-1.5 text-xs text-slate-500">
+        {(workspace === 'drafts' || workspace === 'journal') && (
+          <>
+            <span className="rounded bg-ink-800 px-1.5 py-px text-[10px] font-medium text-accent-300 ring-1 ring-ink-700/60">
+              {workspace === 'drafts' ? '章纲与存稿' : '创作日志'}
+            </span>
+            <span className="text-slate-700">/</span>
+          </>
+        )}
         <span className="truncate">{project.title}</span>
-        <span className="text-slate-700">/</span>
-        <span className="truncate text-slate-300">{chapter?.title ?? '—'}</span>
+        {loc && (
+          <>
+            <span className="text-slate-700">/</span>
+            <span className="max-w-24 truncate">{loc.volume.title}</span>
+            <span className="text-slate-700">/</span>
+            <span className="max-w-24 truncate">{loc.unit.title}</span>
+            <span className="text-slate-700">/</span>
+            <span className="max-w-32 truncate text-slate-300">{loc.chapter.title}</span>
+          </>
+        )}
         {workspace === 'write' && scene && (
           <>
             <span className="text-slate-700">/</span>
@@ -118,17 +139,22 @@ export default function TopBar() {
             Codex
           </button>
         )}
-        <button title="AI 助手" className="btn-ghost">
+        <button
+          title="AI 助手"
+          onClick={() => setAiPanelOpen(true)}
+          className={`btn ${aiPanelOpen ? 'btn-primary' : 'btn-ghost'}`}
+        >
           <Sparkles size={14} className="text-amber-400" />
           AI
         </button>
-        <button className="btn-ghost !px-2">
-          <Search size={14} />
-        </button>
-        <button className="btn-ghost !px-2">
+        <button
+          title="分享与导出"
+          onClick={() => setShareOpen(true)}
+          className="btn-ghost !px-2"
+        >
           <Share2 size={14} />
         </button>
-        <button className="btn-ghost !px-2">
+        <button title="设置" onClick={() => setSettingsOpen(true)} className="btn-ghost !px-2">
           <Settings size={14} />
         </button>
         <div className="mx-1 h-5 w-px bg-ink-700" />

@@ -2,6 +2,7 @@ import { useMemo } from 'react';
 import { useProjectStore } from '../../store/useProjectStore';
 import { useUIStore } from '../../store/useUIStore';
 import { SCENE_STATUS_META } from '../../types';
+import { flatScenes } from '../../utils/structure';
 
 /**
  * Matrix 视图:以表格矩阵呈现"场景 × 属性",方便横向对比节奏与分布
@@ -11,26 +12,25 @@ export default function MatrixView() {
   const setActiveScene = useProjectStore((s) => s.setActiveScene);
   const setWorkspace = useUIStore((s) => s.setWorkspace);
 
-  const rows = useMemo(() => {
-    const all: { sceneId: string; chapterNo: number; order: number; title: string; pov: string; location: string; timeline: string; mood: string; status: string; words: number }[] = [];
-    project.chapters.forEach((c) => {
-      c.scenes.forEach((s) => {
-        all.push({
-          sceneId: s.id,
-          chapterNo: c.order,
-          order: s.order,
-          title: s.title,
-          pov: s.pov || '—',
-          location: s.location || '—',
-          timeline: s.timeline || '—',
-          mood: s.mood || '—',
-          status: s.status,
-          words: s.wordCount,
-        });
-      });
-    });
-    return all;
-  }, [project]);
+  const rows = useMemo(
+    () =>
+      flatScenes(project).map(({ volume, unit, chapter, scene }) => ({
+        sceneId: scene.id,
+        /** 卷/单元/章 的路径标识,用于判断分组换行 */
+        groupKey: `${volume.id}::${unit.id}::${chapter.id}`,
+        chapterNo: chapter.order,
+        chapterTitle: chapter.title,
+        order: scene.order,
+        title: scene.title,
+        pov: scene.pov || '—',
+        location: scene.location || '—',
+        timeline: scene.timeline || '—',
+        mood: scene.mood || '—',
+        status: scene.status,
+        words: scene.wordCount,
+      })),
+    [project]
+  );
 
   return (
     <div className="p-5">
@@ -52,7 +52,7 @@ export default function MatrixView() {
             <tbody>
               {rows.map((row, i) => {
                 const meta = SCENE_STATUS_META[row.status as keyof typeof SCENE_STATUS_META] ?? SCENE_STATUS_META.idea;
-                const isNewChapter = i === 0 || rows[i - 1].chapterNo !== row.chapterNo;
+                const isNewChapter = i === 0 || rows[i - 1].groupKey !== row.groupKey;
                 return (
                   <tr
                     key={row.sceneId}
@@ -65,8 +65,11 @@ export default function MatrixView() {
                     } border-b border-ink-700/30`}
                   >
                     {isNewChapter ? (
-                      <td className="px-3 py-2.5 align-top">
-                        <span className="font-mono text-[10px] font-semibold text-accent-400">CH.{row.chapterNo}</span>
+                      <td className="max-w-36 px-3 py-2.5 align-top">
+                        <div className="truncate text-[11px] font-medium text-slate-300" title={row.chapterTitle}>
+                          {row.chapterTitle}
+                        </div>
+                        <div className="font-mono text-[9px] text-accent-400/70">CH.{row.chapterNo}</div>
                       </td>
                     ) : (
                       <td className="px-3 py-2.5 align-top" />

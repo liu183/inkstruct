@@ -45,6 +45,43 @@ export interface Chapter {
   scenes: Scene[];
 }
 
+/**
+ * 单元:卷之下的故事单元(一个完整的情节段落/arc)
+ * 例:第一卷《初入青云》→ 单元一《古庙惊魂》
+ */
+export interface Unit {
+  id: string;
+  title: string;
+  order: number;
+  summary: string;
+  status: SceneStatus;
+  chapters: Chapter[];
+}
+
+/** 卷:长篇网文的最大结构单位 */
+export interface Volume {
+  id: string;
+  title: string;
+  order: number;
+  summary: string;
+  status: SceneStatus;
+  units: Unit[];
+}
+
+/** 创作日志:记录每日写作进度与心得 */
+export interface JournalEntry {
+  id: string;
+  /** 日期 YYYY-MM-DD */
+  date: string;
+  /** 当日字数 */
+  words: number;
+  /** 日志正文 */
+  note: string;
+  /** 当日状态/心情 */
+  mood?: string;
+  createdAt: number;
+}
+
 export type CodexType = 'character' | 'location' | 'item' | 'event' | 'faction' | 'lore' | 'storyline';
 
 export const CODEX_TYPE_META: Record<CodexType, { label: string; color: string; desc: string }> = {
@@ -111,12 +148,17 @@ export interface Project {
   author: string;
   genre: string;
   logline: string;
-  chapters: Chapter[];
+  /** 故事结构:卷 → 单元 → 章 → 场景 */
+  volumes: Volume[];
   codex: CodexEntry[];
   /** 灵感池:收藏的灵感卡片 */
   inspirationCards: InspirationCard[];
   /** 灵感助手配置 */
   inspirationConfig: InspirationConfig;
+  /** 创作日志 */
+  journal: JournalEntry[];
+  createdAt: number;
+  updatedAt: number;
 }
 
 // ============ AI 灵感助手 ============
@@ -248,4 +290,5 @@ export interface SlashCommand {
 // ============ 视图模式 ============
 
 export type PlanViewMode = 'grid' | 'matrix' | 'outline';
-export type Workspace = 'plan' | 'write' | 'codex' | 'inspiration';
+/** 主工作台(顶部切换) + 侧边栏功能页(章纲与存稿 / 创作日志) */
+export type Workspace = 'plan' | 'write' | 'codex' | 'inspiration' | 'drafts' | 'journal';

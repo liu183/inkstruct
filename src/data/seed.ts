@@ -55,7 +55,21 @@ export const seedProject: Project = {
       createdAt: 1782900000000,
     },
   ],
-  chapters: [
+  volumes: [
+    {
+      id: 'v1',
+      title: '第一卷 · 初入青云',
+      order: 1,
+      summary: '从荒山古庙的穿越之夜,到藏剑阁万剑俯首,沈墨尘踏入青云宗的修仙世界。',
+      status: 'writing',
+      units: [
+        {
+          id: 'u1',
+          title: '单元一 · 古庙惊魂',
+          order: 1,
+          summary: '穿越当夜的古庙血战,无名古剑首次觉醒。',
+          status: 'done',
+          chapters: [
     {
       id: 'c1',
       title: '第一章 · 荒山夜话',
@@ -107,6 +121,15 @@ export const seedProject: Project = {
         },
       ],
     },
+          ],
+        },
+        {
+          id: 'u2',
+          title: '单元二 · 剑阁风云',
+          order: 2,
+          summary: '择剑大典万剑俯首,主角身份初露端倪。',
+          status: 'writing',
+          chapters: [
     {
       id: 'c2',
       title: '第二章 · 剑阁惊变',
@@ -204,6 +227,27 @@ export const seedProject: Project = {
           summary: '反派视角,揭示阴谋。',
           wordCount: 0,
           content: '',
+        },
+      ],
+    },
+          ],
+        },
+      ],
+    },
+    {
+      id: 'v2',
+      title: '第二卷 · 千仞深渊',
+      order: 2,
+      summary: '渊底封印松动,正魔两道齐聚,「天变」正式拉开帷幕。',
+      status: 'idea',
+      units: [
+        {
+          id: 'u3',
+          title: '单元一 · 渊底秘辛',
+          order: 1,
+          summary: '试炼深入渊底,封印真相与吞天蟒的传说浮出水面。',
+          status: 'idea',
+          chapters: [],
         },
       ],
     },
@@ -536,4 +580,32 @@ export const seedProject: Project = {
       updatedAt: 1782900000000,
     },
   ],
+  journal: [
+    {
+      id: 'j1',
+      date: '2026-08-28',
+      words: 2140,
+      note: '开荒第一章。荒山古庙的开篇改了三遍,最后决定直接从剧痛中醒来切入,砍掉穿越前的铺垫。',
+      mood: '顺畅',
+      createdAt: 1782900000000,
+    },
+    {
+      id: 'j2',
+      date: '2026-08-29',
+      words: 1860,
+      note: '写完古剑首次显威。剑鸣那段的节奏卡了很久,改成短句连发才有那种炸开的感觉。',
+      mood: '卡壳后突破',
+      createdAt: 1782986400000,
+    },
+    {
+      id: 'j3',
+      date: '2026-08-30',
+      words: 1700,
+      note: '择剑大典换苏晚晴 POV,大场面好写但容易散,靠「她注意到那个杂役」这个细节把视角收住。',
+      mood: '满意',
+      createdAt: 1783072800000,
+    },
+  ],
+  createdAt: 1782900000000,
+  updatedAt: 1783072800000,
 };

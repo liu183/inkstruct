@@ -481,9 +481,14 @@ interface CharacterDesign {
 }
 
 function StoryDesignView({ pool }: { pool: InspirationCard[] }) {
+  const project = useProjectStore((s) => s.project);
   const setStatusMessage = useUIStore((s) => s.setStatusMessage);
   const setWorkspace = useUIStore((s) => s.setWorkspace);
   const setPlanViewMode = useUIStore((s) => s.setPlanViewMode);
+  const addVolume = useProjectStore((s) => s.addVolume);
+  const updateVolumeMeta = useProjectStore((s) => s.updateVolumeMeta);
+  const addUnit = useProjectStore((s) => s.addUnit);
+  const updateUnitMeta = useProjectStore((s) => s.updateUnitMeta);
   const addChapter = useProjectStore((s) => s.addChapter);
   const updateChapterMeta = useProjectStore((s) => s.updateChapterMeta);
   const addCodexEntry = useProjectStore((s) => s.addCodexEntry);
@@ -539,9 +544,19 @@ function StoryDesignView({ pool }: { pool: InspirationCard[] }) {
       setStatusMessage('灵感池还没有带故事弧位的卡片,先抽卡或定向生成并收藏');
       return;
     }
+    // 故事整体大纲走向 → 单独成卷,卷内每段弧一章
+    const volumeId = addVolume();
+    updateVolumeMeta(volumeId, {
+      title: `大纲卷 · ${project.title}`.slice(0, 40),
+      summary: `由灵感池的 ${filled.length} 段弧位自动合成的故事整体大纲走向。`,
+      status: 'idea',
+    });
+    const unitId = addUnit(volumeId);
+    updateUnitMeta(unitId, { title: '单元一 · 主线走向', status: 'idea' });
+
     filled.forEach((seg, i) => {
       const card = seg.card!;
-      const chapterId = addChapter();
+      const chapterId = addChapter(unitId);
       const lines = [
         `【${ARC_ROLE_META[seg.arc].label}】${card.hook}`,
         card.conflict && `冲突:${card.conflict}`,
@@ -556,7 +571,7 @@ function StoryDesignView({ pool }: { pool: InspirationCard[] }) {
     });
     setPlanViewMode('outline');
     setWorkspace('plan');
-    setStatusMessage(`已按 ${filled.length} 段弧位生成章节大纲,可在 Plan 中细化小说规划`);
+    setStatusMessage(`已生成 1 卷 / ${filled.length} 章大纲,可在 Plan 中细化小说规划`);
   };
 
   /* ---------- 落笔:角色设计 → Codex 角色档案 ---------- */

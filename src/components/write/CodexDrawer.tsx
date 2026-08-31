@@ -6,6 +6,7 @@ import { CODEX_TYPE_META, type CodexEntry } from '../../types';
 import { CARD_KEY_FIELDS, CODEX_TEMPLATES } from '../../data/codexTemplates';
 import { formatFieldValue } from '../codex/CodexFieldInput';
 import CodexAvatar from '../codex/CodexAvatar';
+import { locateScene } from '../../utils/structure';
 
 /**
  * Write 页右侧 Codex 抽屉:
@@ -15,9 +16,7 @@ import CodexAvatar from '../codex/CodexAvatar';
  */
 export default function CodexDrawer() {
   const project = useProjectStore((s) => s.project);
-  const scene = useProjectStore((s) =>
-    s.project.chapters.flatMap((c) => c.scenes).find((sc) => sc.id === s.activeSceneId)
-  );
+  const scene = useProjectStore((s) => locateScene(s.project, s.activeSceneId)?.scene ?? null);
   const setCodexDrawerOpen = useUIStore((s) => s.setCodexDrawerOpen);
   const setWorkspace = useUIStore((s) => s.setWorkspace);
   const [query, setQuery] = useState('');

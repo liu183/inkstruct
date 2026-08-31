@@ -2,6 +2,7 @@ import { useCallback, useRef, useState } from 'react';
 import { streamAIText, AI_COMMAND_LABELS, type AIGenContext } from '../utils/aiEngine';
 import { useProjectStore } from '../store/useProjectStore';
 import { useUIStore } from '../store/useUIStore';
+import { locateScene } from '../utils/structure';
 
 export interface AIOutputState {
   active: boolean;
@@ -74,7 +75,7 @@ export function useAIWriter() {
       setState((s) => {
         if (s.output) {
           const { project } = useProjectStore.getState();
-          const scene = project.chapters.flatMap((c) => c.scenes).find((sc) => sc.id === sceneId);
+          const scene = locateScene(project, sceneId)?.scene;
           if (scene) {
             const next = mode === 'replace' ? s.output : scene.content + (scene.content ? '\n\n' : '') + s.output;
             updateSceneContent(sceneId, next);
