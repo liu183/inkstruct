@@ -125,6 +125,7 @@ export default function ProjectSwitcher() {
           <div className="border-t border-ink-700/60 p-1">
             {renaming ? (
               <MetaForm
+                key="rename"
                 title="重命名当前书"
                 initial={{
                   title: project.title,
@@ -142,6 +143,7 @@ export default function ProjectSwitcher() {
               />
             ) : creating ? (
               <MetaForm
+                key="create"
                 title="新建一本书"
                 initial={{ title: '', author: project.author, genre: '', logline: '' }}
                 submitLabel="创建"

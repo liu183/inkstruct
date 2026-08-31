@@ -1,11 +1,12 @@
 import { useMemo, useState } from 'react';
 import {
-  ChevronDown, ChevronRight, FileText, Layers, ListOrdered, Plus, Target,
+  ChevronDown, ChevronRight, FileText, Layers, ListOrdered, Pencil, Plus, Target, Trash2,
 } from 'lucide-react';
 import { useProjectStore } from '../../store/useProjectStore';
 import { useUIStore } from '../../store/useUIStore';
-import { SCENE_STATUS_META, type Chapter, type Unit, type Volume } from '../../types';
-import { flatScenes, statusStats } from '../../utils/structure';
+import { SCENE_STATUS_META, type Chapter, type Scene, type Unit, type Volume } from '../../types';
+import { statusStats } from '../../utils/structure';
+import SceneEditModal from './SceneEditModal';
 
 /**
  * Outline 视图:四层大纲(卷 → 单元 → 章 → 场景),支持逐级折叠
@@ -17,11 +18,15 @@ export default function OutlineView() {
   const addVolume = useProjectStore((s) => s.addVolume);
   const addUnit = useProjectStore((s) => s.addUnit);
   const addChapter = useProjectStore((s) => s.addChapter);
-  const addScene = useProjectStore((s) => s.addScene);
 
   const [openVolumes, setOpenVolumes] = useState<Record<string, boolean>>({});
   const [openUnits, setOpenUnits] = useState<Record<string, boolean>>({});
   const [openChapters, setOpenChapters] = useState<Record<string, boolean>>({});
+
+  // 场景增删改
+  const deleteScene = useProjectStore((s) => s.deleteScene);
+  const [editingScene, setEditingScene] = useState<Scene | null>(null);
+  const [creatingFor, setCreatingFor] = useState<{ chapterId: string; chapterTitle: string } | null>(null);
 
   const stats = useMemo(() => statusStats(project), [project]);
   const volOpen = (id: string) => openVolumes[id] !== false;
@@ -109,7 +114,11 @@ export default function OutlineView() {
                     chapterOpen={chapOpen}
                     onToggleChapter={(id) => setOpenChapters((c) => ({ ...c, [id]: !chapOpen(id) }))}
                     onAddChapter={() => addChapter(unit.id)}
-                    onAddScene={addScene}
+                    onAddScene={(chapterId, chapterTitle) => setCreatingFor({ chapterId, chapterTitle })}
+                    onEditScene={setEditingScene}
+                    onDeleteScene={(s) => {
+                      if (confirm(`删除场景「${s.title}」?其正文将一并删除`)) deleteScene(s.id);
+                    }}
                     onOpenScene={(id) => {
                       setActiveScene(id);
                       setWorkspace('write');
@@ -143,6 +152,16 @@ export default function OutlineView() {
           还没有结构,先新增一卷,再在其下建单元与章
         </p>
       )}
+
+      {/* 场景表单模态 */}
+      {editingScene && <SceneEditModal scene={editingScene} onClose={() => setEditingScene(null)} />}
+      {creatingFor && (
+        <SceneEditModal
+          chapterId={creatingFor.chapterId}
+          chapterTitle={creatingFor.chapterTitle}
+          onClose={() => setCreatingFor(null)}
+        />
+      )}
     </div>
   );
 }
@@ -157,6 +176,8 @@ function UnitBlock({
   onToggleChapter,
   onAddChapter,
   onAddScene,
+  onEditScene,
+  onDeleteScene,
   onOpenScene,
 }: {
   unit: Unit;
@@ -165,7 +186,9 @@ function UnitBlock({
   chapterOpen: (id: string) => boolean;
   onToggleChapter: (id: string) => void;
   onAddChapter: () => void;
-  onAddScene: (chapterId: string) => void;
+  onAddScene: (chapterId: string, chapterTitle: string) => void;
+  onEditScene: (scene: Scene) => void;
+  onDeleteScene: (scene: Scene) => void;
   onOpenScene: (sceneId: string) => void;
 }) {
   return (
@@ -203,7 +226,9 @@ function UnitBlock({
               chapter={chapter}
               open={chapterOpen(chapter.id)}
               onToggle={() => onToggleChapter(chapter.id)}
-              onAddScene={() => onAddScene(chapter.id)}
+              onAddScene={() => onAddScene(chapter.id, chapter.title)}
+              onEditScene={onEditScene}
+              onDeleteScene={onDeleteScene}
               onOpenScene={onOpenScene}
             />
           ))}
@@ -228,12 +253,16 @@ function ChapterBlock({
   open,
   onToggle,
   onAddScene,
+  onEditScene,
+  onDeleteScene,
   onOpenScene,
 }: {
   chapter: Chapter;
   open: boolean;
   onToggle: () => void;
   onAddScene: () => void;
+  onEditScene: (scene: Scene) => void;
+  onDeleteScene: (scene: Scene) => void;
   onOpenScene: (sceneId: string) => void;
 }) {
   return (
@@ -265,42 +294,61 @@ function ChapterBlock({
       {open && (
         <div className="divide-y divide-ink-700/15">
           {chapter.scenes.map((scene) => (
-            <button
-              key={scene.id}
-              onClick={() => onOpenScene(scene.id)}
-              className="group flex w-full items-start gap-3 py-2.5 pl-14 pr-4 text-left transition-colors hover:bg-ink-850/50"
-            >
-              <span className="mt-0.5 font-mono text-[10px] text-slate-600">
-                {String(scene.order).padStart(2, '0')}
-              </span>
-              <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-2">
-                  <FileText size={12} className="shrink-0 text-slate-500" />
-                  <span className="text-[11px] font-semibold text-slate-300 group-hover:text-accent-300">
-                    {scene.title}
-                  </span>
-                  <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${SCENE_STATUS_META[scene.status].dot}`} />
-                </div>
-                <p className="mt-0.5 text-[10px] leading-relaxed text-slate-500">{scene.summary}</p>
-
-                {scene.beats.length > 0 && (
-                  <div className="mt-1.5 flex items-start gap-1.5">
-                    <ListOrdered size={11} className="mt-0.5 shrink-0 text-accent-400/60" />
-                    <div className="space-y-0.5">
-                      {scene.beats.map((b, idx) => (
-                        <p key={b.id} className="text-[10px] text-slate-600">
-                          <span className="mr-1 font-mono text-accent-400/50">{idx + 1}.</span>
-                          {b.summary}
-                        </p>
-                      ))}
-                    </div>
+            <div key={scene.id} className="group relative">
+              <button
+                onClick={() => onOpenScene(scene.id)}
+                className="flex w-full items-start gap-3 py-2.5 pl-14 pr-16 text-left transition-colors hover:bg-ink-850/50"
+              >
+                <span className="mt-0.5 font-mono text-[10px] text-slate-600">
+                  {String(scene.order).padStart(2, '0')}
+                </span>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2">
+                    <FileText size={12} className="shrink-0 text-slate-500" />
+                    <span className="text-[11px] font-semibold text-slate-300 group-hover:text-accent-300">
+                      {scene.title}
+                    </span>
+                    <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${SCENE_STATUS_META[scene.status].dot}`} />
                   </div>
-                )}
+                  <p className="mt-0.5 text-[10px] leading-relaxed text-slate-500">{scene.summary}</p>
+
+                  {scene.beats.length > 0 && (
+                    <div className="mt-1.5 flex items-start gap-1.5">
+                      <ListOrdered size={11} className="mt-0.5 shrink-0 text-accent-400/60" />
+                      <div className="space-y-0.5">
+                        {scene.beats.map((b, idx) => (
+                          <p key={b.id} className="text-[10px] text-slate-600">
+                            <span className="mr-1 font-mono text-accent-400/50">{idx + 1}.</span>
+                            {b.summary}
+                          </p>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+                <span className="shrink-0 text-[10px] font-mono text-slate-600">
+                  {scene.wordCount.toLocaleString()} 字
+                </span>
+              </button>
+
+              {/* 行内编辑/删除 */}
+              <div className="absolute right-3 top-2 hidden items-center gap-0.5 group-hover:flex">
+                <button
+                  title="编辑场景信息"
+                  onClick={() => onEditScene(scene)}
+                  className="rounded p-1 text-slate-500 transition-colors hover:bg-ink-700 hover:text-accent-300"
+                >
+                  <Pencil size={12} />
+                </button>
+                <button
+                  title="删除场景"
+                  onClick={() => onDeleteScene(scene)}
+                  className="rounded p-1 text-slate-500 transition-colors hover:bg-ink-700 hover:text-red-400"
+                >
+                  <Trash2 size={12} />
+                </button>
               </div>
-              <span className="shrink-0 text-[10px] font-mono text-slate-600">
-                {scene.wordCount.toLocaleString()} 字
-              </span>
-            </button>
+            </div>
           ))}
           {chapter.scenes.length === 0 && (
             <button

@@ -194,6 +194,8 @@ interface ProjectState {
   addChapter: (unitId?: string) => string;
   updateChapterMeta: (chapterId: string, patch: Partial<Chapter>) => void;
   deleteChapter: (chapterId: string) => void;
+  /** 拖拽移动章:插入到目标单元的 targetIndex 位置,并重排 order */
+  moveChapter: (chapterId: string, targetUnitId: string, targetIndex: number) => void;
 
   // ---- 单元 ----
   addUnit: (volumeId?: string) => string;
@@ -235,14 +237,19 @@ const initialProjects = persisted?.projects ?? [seedProject];
 const initialProject =
   initialProjects.find((p) => p.id === persisted?.activeProjectId) ?? initialProjects[0];
 
-/** 取当前项目第一个可用场景,用于初始化导航 */
-function firstIds(project: Project) {
+/** 取当前项目第一个可用场景,用于初始化/切换项目时的导航(字段名与 state 一致,可直接展开) */
+function firstIds(project: Project): {
+  activeVolumeId: string;
+  activeUnitId: string;
+  activeChapterId: string;
+  activeSceneId: string;
+} {
   const loc = flatScenes(project)[0];
   return {
-    volumeId: loc?.volume.id ?? '',
-    unitId: loc?.unit.id ?? '',
-    chapterId: loc?.chapter.id ?? '',
-    sceneId: loc?.scene.id ?? '',
+    activeVolumeId: loc?.volume.id ?? '',
+    activeUnitId: loc?.unit.id ?? '',
+    activeChapterId: loc?.chapter.id ?? '',
+    activeSceneId: loc?.scene.id ?? '',
   };
 }
 const ids0 = firstIds(initialProject);
@@ -278,10 +285,10 @@ export const useProjectStore = create<ProjectState>((set, get) => {
     activeProjectId: initialProject.id,
     project: initialProject,
 
-    activeVolumeId: ids0.volumeId,
-    activeUnitId: ids0.unitId,
-    activeChapterId: ids0.chapterId,
-    activeSceneId: ids0.sceneId,
+    activeVolumeId: ids0.activeVolumeId,
+    activeUnitId: ids0.activeUnitId,
+    activeChapterId: ids0.activeChapterId,
+    activeSceneId: ids0.activeSceneId,
 
     /* ============ 项目 CRUD ============ */
 
@@ -450,6 +457,37 @@ export const useProjectStore = create<ProjectState>((set, get) => {
 
     updateChapterMeta: (chapterId, patch) =>
       commit((p) => mapChapters(p, (c) => (c.id === chapterId ? { ...c, ...patch } : c))),
+
+    moveChapter: (chapterId, targetUnitId, targetIndex) => {
+      // 1. 找到被拖的章
+      let moved: Chapter | undefined;
+      get().project.volumes.forEach((v) =>
+        v.units.forEach((u) => {
+          const found = u.chapters.find((c) => c.id === chapterId);
+          if (found) moved = found;
+        })
+      );
+      if (!moved) return;
+      // 2. 从原位置移除
+      const removed = mapUnits(get().project, (u) => ({
+        ...u,
+        chapters: u.chapters.filter((c) => c.id !== chapterId),
+      }));
+      // 3. 插入目标位置并重排 order(拖到目标卡上,落在目标卡附近)
+      const next = mapUnits(removed, (u) => {
+        if (u.id !== targetUnitId) return u;
+        const arr = [...u.chapters];
+        const insertAt = Math.max(0, Math.min(targetIndex, arr.length));
+        arr.splice(insertAt, 0, moved!);
+        return { ...u, chapters: arr.map((c, i) => ({ ...c, order: i + 1 })) };
+      });
+      set((state) => {
+        const project = { ...next, updatedAt: Date.now() };
+        const projects = state.projects.map((p) => (p.id === project.id ? project : p));
+        saveState(projects, state.activeProjectId);
+        return { project, projects };
+      });
+    },
 
     deleteChapter: (chapterId) => {
       commit((p) => mapUnits(p, (u) => ({ ...u, chapters: u.chapters.filter((c) => c.id !== chapterId) })));

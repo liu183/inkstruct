@@ -32,6 +32,7 @@ export const AI_COMMAND_LABELS: Record<string, string> = {
   'ai-condense': '压缩',
   'ai-rewrite': '改写',
   'ai-summarize': '总结',
+  'ai-beat-expand': '扩写节拍',
 };
 
 /** 命令 → 返回文本模板 */
@@ -135,6 +136,17 @@ function buildOutput(ctx: AIGenContext): string {
 
     case 'ai-summarize':
       return `场景「${sceneTitle}」:${pov}在${location}遭遇冲突,推动主线向前。本场完成"惊变"与"钩子"的双重任务,建议下一场景转入敌手视角,以增强压迫感。`;
+
+    case 'ai-beat-expand':
+      return [
+        `${pov}在${location}压下翻涌的心绪,将面前这一步看得很重。`,
+        '',
+        `${sceneTitle}`,
+        '',
+        `他缓缓呼出一口浊气,指尖微颤——不是恐惧,而是某种久违的、蓄势待发的灼热。天边的暮色压得更低了,像是给这一夜下了最后通牒。`,
+        '',
+        `「该来的,总要来。」${pov}低声道,随即迈步向前,身后卷起的尘埃在昏光中散开。`,
+      ].join('\n');
 
     default:
       return `【AI 正在围绕「${sceneTitle}」生成内容……】`;
