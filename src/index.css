@@ -1,0 +1,81 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: dark;
+}
+
+html, body, #root {
+  height: 100%;
+}
+
+body {
+  @apply bg-ink-950 text-slate-200 antialiased;
+  font-family: 'Inter', 'PingFang SC', 'Microsoft YaHei', system-ui, sans-serif;
+  overflow: hidden;
+}
+
+/* 细滚动条 */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #2f3850 transparent;
+}
+*::-webkit-scrollbar { width: 8px; height: 8px; }
+*::-webkit-scrollbar-thumb { background: #2f3850; border-radius: 8px; }
+*::-webkit-scrollbar-thumb:hover { background: #3d4765; }
+*::-webkit-scrollbar-track { background: transparent; }
+
+@layer components {
+  .panel {
+    @apply rounded-xl border border-ink-700/70 bg-ink-850/80 backdrop-blur;
+  }
+  .btn {
+    @apply inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium transition-colors cursor-pointer select-none;
+  }
+  .btn-primary {
+    @apply btn bg-accent-600 text-white hover:bg-accent-500;
+  }
+  .btn-ghost {
+    @apply btn text-slate-400 hover:bg-ink-700/60 hover:text-slate-200;
+  }
+  .chip {
+    @apply inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] font-medium;
+  }
+  .input-dark {
+    @apply w-full rounded-lg border border-ink-700 bg-ink-900 px-2.5 py-1.5 text-xs text-slate-200 outline-none placeholder:text-slate-500 focus:border-accent-500/60 focus:ring-2 focus:ring-accent-500/20;
+  }
+  /* Codex 字段输入 */
+  .codex-input {
+    @apply w-full rounded-lg border border-ink-700 bg-ink-900 px-2.5 py-1.5 text-[11px] text-slate-200 outline-none transition-colors placeholder:text-slate-600 focus:border-accent-500/50 focus:ring-2 focus:ring-accent-500/15;
+  }
+  .codex-textarea {
+    @apply w-full resize-none rounded-lg border border-ink-700 bg-ink-900 px-2.5 py-2 text-[11px] leading-relaxed text-slate-200 outline-none transition-colors placeholder:text-slate-600 focus:border-accent-500/50 focus:ring-2 focus:ring-accent-500/15;
+  }
+  .codex-select-option {
+    @apply bg-ink-850 text-slate-200;
+  }
+}
+
+/* 编辑器打字光标 */
+.ai-cursor::after {
+  content: '';
+  display: inline-block;
+  width: 2px;
+  height: 1.1em;
+  margin-left: 2px;
+  vertical-align: text-bottom;
+  background: #a78bfa;
+  animation: blinkCursor 0.9s steps(1) infinite;
+}
+@keyframes blinkCursor {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
+
+/* prose 编辑区 */
+.prose-editor {
+  @apply text-[15px] leading-[1.9] text-slate-300;
+}
+.prose-editor:focus { outline: none; }
+.prose-editor p { @apply mb-3; }
